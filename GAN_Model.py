@@ -4,6 +4,69 @@ import torch.nn.functional as F
 from torchvision.models import mobilenet_v3_small, MobileNet_V3_Small_Weights
 
 EPSILON = 1e-6
+
+
+class ResBlock(nn.Module):
+    def __init__(self, ch):
+        super().__init__()
+        self.conv1 = nn.Conv2d(ch, ch, 3, padding=1, bias=False)
+        self.bn1   = nn.BatchNorm2d(ch)
+        self.conv2 = nn.Conv2d(ch, ch, 3, padding=1, bias=False)
+        self.bn2   = nn.BatchNorm2d(ch)
+        self.act   = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        identity = x
+        out = self.act(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        return self.act(out + identity)
+
+class RefinementNet(nn.Module):
+    def __init__(self, base_ch=64):
+        super().__init__()
+
+        # project depth to feature space
+        self.depth_proj = nn.Conv2d(1, base_ch, 3, padding=1)
+
+        # project encoder features
+        self.skip2_proj = nn.Conv2d(48, base_ch, 1)
+        self.skip3_proj = nn.Conv2d(24, base_ch, 1)
+        self.bottle_proj = nn.Conv2d(96, base_ch, 1)
+
+        # fusion conv
+        self.fuse = nn.Sequential(
+            nn.Conv2d(base_ch * 4, base_ch, 3, padding=1),
+            nn.BatchNorm2d(base_ch),
+            nn.ReLU(inplace=True),
+        )
+
+        # residual blocks
+        self.body = nn.Sequential(
+            *[ResBlock(base_ch) for _ in range(4)]
+        )
+
+        self.tail = nn.Conv2d(base_ch, 1, 3, padding=1)
+
+    def forward(self, d_fused, skip2, skip3, bottle):
+
+        H, W = d_fused.shape[2:]
+
+        d_feat = self.depth_proj(d_fused)
+
+        s2 = F.interpolate(self.skip2_proj(skip2), size=(H, W), mode="bilinear", align_corners=False)
+        s3 = F.interpolate(self.skip3_proj(skip3), size=(H, W), mode="bilinear", align_corners=False)
+        b  = F.interpolate(self.bottle_proj(bottle), size=(H, W), mode="bilinear", align_corners=False)
+
+        x = torch.cat([d_feat, s2, s3, b], dim=1)
+
+        x = self.fuse(x)
+        x = self.body(x)
+
+        residual = self.tail(x)
+
+        return (d_fused + 0.1 * residual).clamp(0, 1)
+
+
 class DSConv(nn.Module):
     def __init__(self, in_ch: int, out_ch: int, stride: int = 1):
         super().__init__()
@@ -27,17 +90,21 @@ class LightASPP(nn.Module):
             nn.BatchNorm2d(mid), nn.ReLU6(inplace=True),
         )
         self.b1 = nn.Sequential(
-            nn.Conv2d(in_ch, mid, 3, padding=6, dilation=6,
+            nn.Conv2d(in_ch, in_ch, 3, padding=6, dilation=6,
                       groups=in_ch, bias=False),
-            nn.Conv2d(mid, mid, 1, bias=False),
-            nn.BatchNorm2d(mid), nn.ReLU6(inplace=True),
+            nn.Conv2d(in_ch, mid, 1, bias=False),
+            nn.BatchNorm2d(mid),
+            nn.ReLU6(inplace=True),
         )
+
         self.b2 = nn.Sequential(
-            nn.Conv2d(in_ch, mid, 3, padding=12, dilation=12,
+            nn.Conv2d(in_ch, in_ch, 3, padding=12, dilation=12,
                       groups=in_ch, bias=False),
-            nn.Conv2d(mid, mid, 1, bias=False),
-            nn.BatchNorm2d(mid), nn.ReLU6(inplace=True),
+            nn.Conv2d(in_ch, mid, 1, bias=False),
+            nn.BatchNorm2d(mid),
+            nn.ReLU6(inplace=True),
         )
+
         self.pool = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(in_ch, mid, 1, bias=False),
@@ -51,7 +118,13 @@ class LightASPP(nn.Module):
 
     def forward(self, x):
         B, _, H, W = x.shape
-        pooled = self.pool(x).expand(B, -1, H, W)
+        pooled = F.interpolate(
+            self.pool(x),
+            size=(H, W),
+            mode="bilinear",
+            align_corners=False
+        )
+
         return self.proj(torch.cat([self.b0(x), self.b1(x),
                                     self.b2(x), pooled], dim=1))
 
@@ -105,12 +178,14 @@ class ConfidenceGenerator(nn.Module):
         self.stage_s2     = nn.Sequential(*features[4:9])
         self.stage_bottle = nn.Sequential(*features[9:])
 
-        self.bottleneck = LightASPP(in_ch=96, out_ch=96)
+        self.bottleneck = LightASPP(in_ch=576, out_ch=96)
 
         self.head1 = LightDecoderHead(bottleneck_ch=96,
                                       skip_chs=(48, 24), dec_ch=64)
         self.head2 = LightDecoderHead(bottleneck_ch=96,
                                       skip_chs=(48, 24), dec_ch=64)
+
+        self.refine=RefinementNet()
 
     def forward(self, rgb: torch.Tensor,d1: torch.Tensor,d2: torch.Tensor):
 
@@ -129,7 +204,9 @@ class ConfidenceGenerator(nn.Module):
 
         d_fused = (c1 * d1 + c2 * d2) / (c1 + c2 + EPSILON)
 
-        return c1, c2, d_fused
+        d_refined = self.refine(d_fused, skip2, skip3, bottle)
+
+        return c1, c2, d_refined
 
 
 class PatchDiscriminator(nn.Module):
@@ -154,6 +231,8 @@ class PatchDiscriminator(nn.Module):
 
     def forward(self, rgb: torch.Tensor, depth: torch.Tensor) -> torch.Tensor:
         return self.net(torch.cat([rgb, depth], dim=1))
+
+
 
 def gradient_smoothness_loss(depth: torch.Tensor) -> torch.Tensor:
     dx = depth[:, :, :, 1:] - depth[:, :, :, :-1]
