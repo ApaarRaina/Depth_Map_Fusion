@@ -268,6 +268,7 @@ def run_inference_and_display(loader, midas: MiDaSIndoor, outdoor: DepthAnything
 
     display_batch(batch, midas_preds, outdoor_preds)
 
+
 # -------------------------------
 # Main
 # -------------------------------

@@ -79,55 +79,6 @@ class DSConv(nn.Module):
     def forward(self, x):
         return self.act(self.bn(self.pw(self.dw(x))))
 
-class LightASPP(nn.Module):
-
-    def __init__(self, in_ch: int, out_ch: int):
-        super().__init__()
-        mid = out_ch // 2
-
-        self.b0 = nn.Sequential(
-            nn.Conv2d(in_ch, mid, 1, bias=False),
-            nn.BatchNorm2d(mid), nn.ReLU6(inplace=True),
-        )
-        self.b1 = nn.Sequential(
-            nn.Conv2d(in_ch, in_ch, 3, padding=6, dilation=6,
-                      groups=in_ch, bias=False),
-            nn.Conv2d(in_ch, mid, 1, bias=False),
-            nn.BatchNorm2d(mid),
-            nn.ReLU6(inplace=True),
-        )
-
-        self.b2 = nn.Sequential(
-            nn.Conv2d(in_ch, in_ch, 3, padding=12, dilation=12,
-                      groups=in_ch, bias=False),
-            nn.Conv2d(in_ch, mid, 1, bias=False),
-            nn.BatchNorm2d(mid),
-            nn.ReLU6(inplace=True),
-        )
-
-        self.pool = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_ch, mid, 1, bias=False),
-            nn.ReLU6(inplace=True),
-        )
-        self.proj = nn.Sequential(
-            nn.Conv2d(mid * 4, out_ch, 1, bias=False),
-            nn.BatchNorm2d(out_ch), nn.ReLU6(inplace=True),
-            nn.Dropout2d(0.1),
-        )
-
-    def forward(self, x):
-        B, _, H, W = x.shape
-        pooled = F.interpolate(
-            self.pool(x),
-            size=(H, W),
-            mode="bilinear",
-            align_corners=False
-        )
-
-        return self.proj(torch.cat([self.b0(x), self.b1(x),
-                                    self.b2(x), pooled], dim=1))
-
 class LightDecoderHead(nn.Module):
     def __init__(self, bottleneck_ch=96, skip_chs=(48, 24), dec_ch=64):
         super().__init__()
@@ -178,7 +129,7 @@ class ConfidenceGenerator(nn.Module):
         self.stage_s2     = nn.Sequential(*features[4:9])
         self.stage_bottle = nn.Sequential(*features[9:])
 
-        self.bottleneck = LightASPP(in_ch=576, out_ch=96)
+        self.bottleneck = nn.Conv2d(576,96,kernel_size=5,padding=2,stride=1)
 
         self.head1 = LightDecoderHead(bottleneck_ch=96,
                                       skip_chs=(48, 24), dec_ch=64)
