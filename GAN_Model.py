@@ -64,7 +64,7 @@ class RefinementNet(nn.Module):
 
         residual = self.tail(x)
 
-        return (d_fused + 0.1 * residual).clamp(0, 1)
+        return residual.clamp(0, 1)
 
 
 class DSConv(nn.Module):
@@ -182,7 +182,6 @@ class PatchDiscriminator(nn.Module):
 
     def forward(self, rgb: torch.Tensor, depth: torch.Tensor) -> torch.Tensor:
         return self.net(torch.cat([rgb, depth], dim=1))
-
 
 
 def gradient_smoothness_loss(depth: torch.Tensor) -> torch.Tensor:
