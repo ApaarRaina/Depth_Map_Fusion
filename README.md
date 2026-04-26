@@ -142,32 +142,6 @@ Pre-computing depth maps reduces training cost and isolates fusion learning.
 
 ---
 
-## ⚠️ Challenges
-
-* GAN Instability
-* Confidence Collapse
-* Fusion limitations when both inputs fail
-
----
-
-## ✅ Key Takeaways
-
-* Complementary models improve performance
-* Learned fusion is better than fixed blending
-* Refinement network improves local errors
-
----
-
-## 🛠️ Future Work
-
-* Multi-model fusion
-* Diffusion-based refinement
-* Real-time optimization
-
----
-
----
-
 ## 🚀 Usage
 
 ### 🔹 Dataset Preparation
