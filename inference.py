@@ -93,6 +93,7 @@ def run_inference(args):
         "fusion_c2"   : os.path.join(args.out, "fusion", "c2"),
         "midas"       : os.path.join(args.out, "midas"),          # depth_1
         "dav2"        : os.path.join(args.out, "dav2"),           # depth_2
+        "gt"          : os.path.join(args.out, "gt"),
     }
     for d in dirs.values():
         os.makedirs(d, exist_ok=True)
@@ -130,6 +131,7 @@ def run_inference(args):
             save_depth(c2,   os.path.join(dirs["fusion_c2"],   f"{name}.png"))
             save_depth(d1,   os.path.join(dirs["midas"],       f"{name}.png"))
             save_depth(d2,   os.path.join(dirs["dav2"],        f"{name}.png"))
+            save_depth(gt, os.path.join(dirs["gt"],            f"{name}.png"))
 
     # ── Results ───────────────────────────────────────────────
     print_results("MiDaS (depth_1) vs GT",           totals["midas"],  count)
