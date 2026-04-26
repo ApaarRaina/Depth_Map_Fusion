@@ -80,7 +80,7 @@ def run_inference(args):
 
     # ── Fusion model ──────────────────────────────────────────
     model = ConfidenceGenerator().to(device)
-    ckpt_path = os.path.join(args.checkpoints, "pretrained/epoch_75.pt")
+    ckpt_path = os.path.join(args.checkpoints, "outputs/checkpoints/epoch_75.pt")
     ckpt = torch.load(ckpt_path, map_location=device)
     print(f"Loading checkpoint: {ckpt_path}")
     model.load_state_dict(ckpt["gen"])
@@ -146,7 +146,7 @@ def main():
         description="Evaluate fusion model + MiDaS + DepthAnythingV2 against GT depth"
     )
     parser.add_argument("--data",        required=True,  help="Path to processed_dataset root")
-    parser.add_argument("--checkpoints", required=True,  help="Directory containing epoch_30.pt")
+    parser.add_argument("--checkpoints", required=True,  help="Directory containing epoch_75.pt")
     parser.add_argument("--out",         default="./inference_outputs")
     parser.add_argument("--img_size",    type=int, default=256)
 
