@@ -80,7 +80,7 @@ def run_inference(args):
 
     # ── Fusion model ──────────────────────────────────────────
     model = ConfidenceGenerator().to(device)
-    ckpt_path = os.path.join(args.checkpoints, "epoch_75.pt")
+    ckpt_path = os.path.join(args.checkpoints, "pretrained/epoch_75.pt")
     ckpt = torch.load(ckpt_path, map_location=device)
     print(f"Loading checkpoint: {ckpt_path}")
     model.load_state_dict(ckpt["gen"])

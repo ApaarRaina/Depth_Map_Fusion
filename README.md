@@ -173,7 +173,7 @@ processed_dataset/
 To train the model, run:
 
 ```bash
-python train.py
+python train.py   --data ./processed_dataset   --epochs 50   --batch 4
 ```
 
 ---
@@ -183,7 +183,7 @@ python train.py
 To run inference on new images, use:
 
 ```bash
-python inference.py
+python inference.py   --data processed_dataset   --checkpoints outputs/checkpoints
 ```
 
 ---
